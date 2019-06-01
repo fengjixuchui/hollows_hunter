@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pe_sieve_api.h"
+#include <pe_sieve_api.h>
 #include <string>
 
 //HollowsHunter's parameters:
@@ -11,6 +11,7 @@ typedef struct {
     bool loop_scanning;
     bool kill_suspicious;
     bool quiet;
+    bool log;
     t_params pesieve_args; //PE-sieve parameters
 } t_hh_params;
 

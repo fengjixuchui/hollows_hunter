@@ -7,9 +7,9 @@
 
 #include "term_util.h"
 #include "color_scheme.h"
-#include "hollows_hunter.h"
+#include "hh_scanner.h"
 
-#define VERSION "0.1.9"
+#define VERSION "0.2.1"
 
 #define PARAM_SWITCH '/'
 //scan options:
@@ -29,6 +29,7 @@
 #define PARAM_KILL "/kill"
 #define PARAM_UNIQUE_DIR "/uniqd"
 #define PARAM_DIR "/dir"
+#define PARAM_LOG "/log"
 
 //info:
 #define PARAM_HELP "/help"
@@ -160,7 +161,10 @@ void print_help()
     std::cout << "   : Kill processes detected as suspicious\n";
 
     print_in_color(param_color, PARAM_QUIET);
-    std::cout << "\t: Print only the summary and minimalistic info.\n";
+    std::cout << "\t: Display only the summary and minimalistic info.\n";
+
+    print_in_color(param_color, PARAM_LOG);
+    std::cout << "\t: Append each scan summary to the log.\n";
 
     print_in_color(hdr_color, "\nInfo: \n");
     print_in_color(param_color, PARAM_HELP);
@@ -197,6 +201,18 @@ void print_unknown_param(const char *param)
 {
     print_in_color(WARNING_COLOR, "Unknown parameter: ");
     std::cout << param << "\n";
+}
+
+void deploy_scan(t_hh_params &hh_args)
+{
+    do {
+        HHScanner hhunter(hh_args);
+        HHScanReport *report = hhunter.scan();
+        if (report) {
+            hhunter.summarizeScan(report);
+            delete report;
+        }
+    } while (hh_args.loop_scanning);
 }
 
 int main(int argc, char *argv[])
@@ -241,6 +257,9 @@ int main(int argc, char *argv[])
             hh_args.pesieve_args.out_filter = static_cast<t_output_filter>(atoi(argv[i + 1]));
             i++;
         }
+        else if (!strcmp(argv[i], PARAM_LOG)) {
+            hh_args.log = true;
+        }
         else if (!strcmp(argv[i], PARAM_LOOP)) {
             hh_args.loop_scanning = true;
         }
@@ -270,12 +289,10 @@ int main(int argc, char *argv[])
             }
             // if the argument didn't have a param switch, print info but do not exit
         }
-
     }
+
     print_version();
-    do {
-        size_t res = deploy_scan(hh_args);
-    } while (hh_args.loop_scanning);
+    deploy_scan(hh_args);
 
     return 0;
 }

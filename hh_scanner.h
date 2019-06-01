@@ -7,5 +7,22 @@
 #include <vector>
 
 #include "hh_params.h"
+#include "hh_report.h"
 
-size_t pesieve_scan(std::vector<DWORD> &suspicious, t_hh_params &hh_args);
+class HHScanner {
+public:
+    HHScanner(t_hh_params &_args)
+        : hh_args(_args)
+    {
+    }
+
+    HHScanReport* scan();
+    void summarizeScan(HHScanReport *hh_report);
+
+protected:
+    void initOutDir(time_t start_time);
+
+    t_hh_params &hh_args;
+    std::string outDir;
+};
+
