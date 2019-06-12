@@ -6,6 +6,7 @@
 #include <sstream>
 #include <time.h>
 
+using namespace pesieve;
 
 std::string join_path(std::string baseDir, std::string subpath)
 {
@@ -120,18 +121,20 @@ HHScanReport* HHScanner::scan()
     initOutDir(start_time);
     HHScanReport *my_report = new HHScanReport(GetTickCount(), start_time);
 
+    bool found = false;
     for (size_t i = 0; i < cProcesses; i++) {
         if (aProcesses[i] == 0) continue;
-
+        
         DWORD pid = aProcesses[i];
         char image_buf[MAX_PATH] = { 0 };
         get_process_name(pid, image_buf);
-
+        
         if (hh_args.pname.length() > 0) {
             if (!is_searched_process(image_buf, hh_args.pname.c_str())) {
                 //it is not the searched process, so skip it
                 continue;
             }
+            found = true;
             if (!hh_args.quiet) {
                 std::cout << image_buf << " (PID: " << std::dec << pid << ")\n";
             }
@@ -140,10 +143,14 @@ HHScanReport* HHScanner::scan()
             std::cout << ">> Scanning PID: " << std::dec << pid << std::endl;
         }
         hh_args.pesieve_args.pid = pid;
-        t_report report = PESieve_scan(hh_args.pesieve_args);
+        pesieve::t_report report = PESieve_scan(hh_args.pesieve_args);
         my_report->appendReport(report, image_buf);
     }
-
+    if (!found && hh_args.pname.length() > 0) {
+        if (!hh_args.quiet) {
+            std::cout << "[WARNING] Process with the name: " << hh_args.pname << " not found!" << std::endl;
+        }
+    }
     my_report->setEndTick(GetTickCount(), time(NULL));
     return my_report;
 }

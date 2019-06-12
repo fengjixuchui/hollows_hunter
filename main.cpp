@@ -8,8 +8,10 @@
 #include "term_util.h"
 #include "color_scheme.h"
 #include "hh_scanner.h"
+#include <pe_sieve_types.h>
+#include "params_info/pe_sieve_params_info.h"
 
-#define VERSION "0.2.1"
+#define VERSION "0.2.2"
 
 #define PARAM_SWITCH '/'
 //scan options:
@@ -35,49 +37,8 @@
 #define PARAM_HELP "/help"
 #define PARAM_HELP2  "/?"
 #define PARAM_VERSION  "/version"
+#define PARAM_DEFAULTS "/default"
 
-std::string translate_dump_mode(const DWORD dump_mode)
-{
-    switch (dump_mode) {
-    case 0:
-        return "autodetect (default)";
-    case 1:
-        return "virtual (as it is in the memory, no unmapping)";
-    case 2:
-        return "unmapped (converted to raw using sections' raw headers)";
-    case 3:
-        return "realigned raw (converted raw format to be the same as virtual)";
-    }
-    return "undefined";
-}
-
-std::string translate_out_filter(const t_output_filter o_filter)
-{
-    switch (o_filter) {
-    case OUT_FULL:
-        return "no filter: dump everything (default)";
-    case OUT_NO_DUMPS:
-        return "don't dump the modified PEs, but save the report";
-    case OUT_NO_DIR:
-        return "don't dump any files";
-    }
-    return "undefined";
-}
-
-std::string translate_modules_filter(DWORD m_filter)
-{
-    switch (m_filter) {
-    case LIST_MODULES_DEFAULT:
-        return "no filter (as the scanner)";
-    case LIST_MODULES_32BIT:
-        return "32bit only";
-    case LIST_MODULES_64BIT:
-        return "64bit only";
-    case LIST_MODULES_ALL:
-        return "all accessible (default)";
-    }
-    return "undefined";
-}
 
 void print_logo()
 {
@@ -96,7 +57,6 @@ void print_logo()
     set_color(5);
     std::cout << "\n" << logo << std::endl;
 }
-
 
 void print_help()
 {
@@ -131,7 +91,12 @@ void print_help()
     print_in_color(separator_color, "\n---dump options---\n");
 
     print_in_color(param_color, PARAM_IMP_REC);
-    std::cout << "\t: Enable recovering imports.\n";
+    std::cout << " <*imprec_mode>\n\t: Set in which mode the ImportTable should be recovered.\n";;
+    std::cout << "*imprec_mode:\n";
+    for (size_t i = 0; i < pesieve::PE_IMPREC_MODES_COUNT; i++) {
+        pesieve::t_imprec_mode mode = (pesieve::t_imprec_mode)(i);
+        std::cout << "\t" << mode << " - " << translate_imprec_mode(mode) << "\n";
+    }
 
     print_in_color(param_color, PARAM_DUMP_MODE);
     std::cout << " <*dump_mode>\n\t: Set in which mode the detected PE files should be dumped.\n";
@@ -145,8 +110,8 @@ void print_help()
     print_in_color(param_color, PARAM_OUT_FILTER);
     std::cout << " <*ofilter_id>\n\t: Filter the dumped output.\n";
     std::cout << "*ofilter_id:\n";
-    for (size_t i = 0; i < OUT_FILTERS_COUNT; i++) {
-        t_output_filter mode = (t_output_filter)(i);
+    for (size_t i = 0; i < pesieve::OUT_FILTERS_COUNT; i++) {
+        pesieve::t_output_filter mode = (pesieve::t_output_filter)(i);
         std::cout << "\t" << mode << " - " << translate_out_filter(mode) << "\n";
     }
 
@@ -171,6 +136,8 @@ void print_help()
     std::cout << "    : Print this help.\n";
     print_in_color(param_color, PARAM_VERSION);
     std::cout << " : Print version number.\n";
+    print_in_color(param_color, PARAM_DEFAULTS);
+    std::cout << " : Print information about the default settings.\n";
     std::cout << "---" << std::endl;
 }
 
@@ -187,14 +154,91 @@ std::string version_to_str(DWORD version)
     return stream.str();
 }
 
+std::string is_enabled(bool param)
+{
+    if (param) {
+        return "Enabled";
+    }
+    return "Disabled";
+}
+
 void print_version()
 {
     set_color(HILIGHTED_COLOR);
-    std::cout << "HollowsHunter v." << VERSION << "\n";
+    std::cout << "HollowsHunter v." << VERSION;
+    std::cout << " (build on: " << __DATE__ << ")\n";
 
     DWORD pesieve_ver = PESieve_version();
     std::cout << "using: PE-sieve v." << version_to_str(pesieve_ver) << "\n";
     unset_color();
+}
+
+void print_defaults()
+{
+    std::cout << "\nBy default it detects implanted and replaced PE files.\n"
+        "All detected modules are dumped.\n"
+        "The reports and dumps are saved into the current directory.\n"
+        "\n";
+
+    t_hh_params hh_args;
+    hh_args_init(hh_args);
+
+    std::cout << PARAM_PNAME << " : \"" << hh_args.pname << "\"" << "\n";
+    if (hh_args.pname.length() == 0) {
+        std::cout << "\tall runnig processes will be scanned\n";
+    }
+    else {
+        std::cout << "\tonly the process with name: " << hh_args.pname << " will be scanned\n";
+    }
+
+    std::cout << PARAM_HOOKS << " : " << is_enabled(!hh_args.pesieve_args.no_hooks) << "\n";
+    if (hh_args.pesieve_args.no_hooks) {
+        std::cout << "\tdo not scan for hooks and patches";
+    }
+    else {
+        std::cout << "\tinclude scan for hooks and patches";
+    }
+    std::cout << "\n";
+    std::cout << PARAM_SHELLCODE << " : " << is_enabled(hh_args.pesieve_args.shellcode) << "\n";
+    if (!hh_args.loop_scanning) {
+        std::cout << "\t do not scan for shellcodes\n";
+    }
+    std::cout << PARAM_LOOP << " : " << is_enabled(hh_args.loop_scanning) << "\n";
+
+    if (!hh_args.loop_scanning) {
+        std::cout << "\tsingle scan";
+    }
+    std::cout << "\n";
+    std::cout << PARAM_IMP_REC << " : " << std::dec << hh_args.pesieve_args.imprec_mode << "\n"
+        << "\t" << translate_imprec_mode(hh_args.pesieve_args.imprec_mode) << "\n";
+
+    std::cout << PARAM_DUMP_MODE << " : " << std::dec << hh_args.pesieve_args.dump_mode << "\n"
+        << "\t" << translate_dump_mode(hh_args.pesieve_args.dump_mode) << "\n";
+
+    std::cout << PARAM_OUT_FILTER << " : " << std::dec << hh_args.pesieve_args.out_filter << "\n"
+        << "\t" << translate_out_filter(hh_args.pesieve_args.out_filter) << "\n";
+
+    std::cout << PARAM_DIR << " : \"" << hh_args.out_dir << "\"\n";
+    if (hh_args.out_dir.length() == 0) {
+        std::cout << "\tcurrent directory\n";
+    }
+    std::cout << PARAM_UNIQUE_DIR << " : " << is_enabled(hh_args.unique_dir) << "\n";
+    if (!hh_args.unique_dir) {
+        std::cout << " \tdo not create unique directory for the output\n";
+    }
+    std::cout << PARAM_KILL << " : " << is_enabled(hh_args.kill_suspicious) << "\n";
+    if (!hh_args.kill_suspicious) {
+        std::cout << "\tdo not kill suspicious processes";
+    }
+    std::cout << "\n";
+    std::cout << PARAM_QUIET << " : " << is_enabled(hh_args.quiet) << "\n";
+    if (!hh_args.quiet) {
+        std::cout << " \tprint all the information on the screen\n";
+    }
+    std::cout << PARAM_LOG << " : " << is_enabled(hh_args.log) << "\n";
+    if (!hh_args.log) {
+        std::cout << " \tdo not add the results of the scan into the log file\n";
+    }
 }
 
 void print_unknown_param(const char *param)
@@ -233,8 +277,20 @@ int main(int argc, char *argv[])
             print_version();
             return 0;
         }
-        if (!strcmp(argv[i], PARAM_IMP_REC)) {
-            hh_args.pesieve_args.imp_rec = true;
+        if (!strcmp(argv[i], PARAM_DEFAULTS)) {
+            print_version();
+            print_defaults();
+            return 0;
+        }
+        else if (!strcmp(argv[i], PARAM_IMP_REC)) {
+            hh_args.pesieve_args.imprec_mode = pesieve::PE_IMPREC_AUTO;
+            if ((i + 1) < argc) {
+                char* mode_num = argv[i + 1];
+                if (isdigit(mode_num[0])) {
+                    hh_args.pesieve_args.imprec_mode = normalize_imprec_mode(atoi(mode_num));
+                    ++i;
+                }
+            }
         }
         else if (!strcmp(argv[i], PARAM_MODULES_FILTER) && (i + 1) < argc) {
             hh_args.pesieve_args.modules_filter = atoi(argv[i + 1]);
@@ -250,11 +306,11 @@ int main(int argc, char *argv[])
             hh_args.pesieve_args.shellcode = true;
         }
         else if (!strcmp(argv[i], PARAM_DUMP_MODE) && (i + 1) < argc) {
-            hh_args.pesieve_args.dump_mode = atoi(argv[i + 1]);
+            hh_args.pesieve_args.dump_mode = normalize_dump_mode(atoi(argv[i + 1]));
             i++;
         }
         else if (!strcmp(argv[i], PARAM_OUT_FILTER) && (i + 1) < argc) {
-            hh_args.pesieve_args.out_filter = static_cast<t_output_filter>(atoi(argv[i + 1]));
+            hh_args.pesieve_args.out_filter = static_cast<pesieve::t_output_filter>(atoi(argv[i + 1]));
             i++;
         }
         else if (!strcmp(argv[i], PARAM_LOG)) {
@@ -282,17 +338,13 @@ int main(int argc, char *argv[])
         }
         else if (strlen(argv[i]) > 0) {
             print_unknown_param(argv[i]);
-            if (argv[i][0] == PARAM_SWITCH) {
-                print_in_color(HILIGHTED_COLOR, "Available parameters:\n\n");
-                print_help();
-                return 0;
-            }
-            // if the argument didn't have a param switch, print info but do not exit
+            print_in_color(HILIGHTED_COLOR, "Available parameters:\n\n");
+            print_help();
+            return 0;
         }
     }
 
     print_version();
     deploy_scan(hh_args);
-
     return 0;
 }
