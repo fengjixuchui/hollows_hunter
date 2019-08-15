@@ -11,7 +11,7 @@
 #include <pe_sieve_types.h>
 #include "params_info/pe_sieve_params_info.h"
 
-#define VERSION "0.2.2.5"
+#define VERSION "0.2.2.6"
 
 #define PARAM_SWITCH '/'
 //scan options:
@@ -29,6 +29,7 @@
 //output options:
 #define PARAM_QUIET "/quiet"
 #define PARAM_OUT_FILTER "/ofilter"
+#define PARAM_SUSPEND "/suspend"
 #define PARAM_KILL "/kill"
 #define PARAM_UNIQUE_DIR "/uniqd"
 #define PARAM_DIR "/dir"
@@ -126,6 +127,9 @@ void print_help()
     std::cout << "\t: Make a unique, timestamped directory for the output of each scan.\n"
         << "\t(Prevents overwriting results from previous scans)\n";
 
+    print_in_color(param_color, PARAM_SUSPEND);
+    std::cout << ": Suspend processes detected as suspicious\n";
+
     print_in_color(param_color, PARAM_KILL);
     std::cout << "   : Kill processes detected as suspicious\n";
 
@@ -170,7 +174,12 @@ void print_version()
 {
     set_color(HILIGHTED_COLOR);
     std::cout << "HollowsHunter v." << VERSION;
-    std::cout << " (build on: " << __DATE__ << ")\n";
+#ifdef _WIN64
+	std::cout << " (x64)" << "\n";
+#else
+	std::cout << " (x86)" << "\n";
+#endif
+	std::cout << "Built on: " << __DATE__ << "\n\n";
 
     DWORD pesieve_ver = PESieve_version();
     std::cout << "using: PE-sieve v." << version_to_str(pesieve_ver) << "\n";
@@ -229,12 +238,18 @@ void print_defaults()
 
     std::cout << PARAM_DIR << " : \"" << hh_args.out_dir << "\"\n";
     if (hh_args.out_dir.length() == 0) {
-        std::cout << "\tcurrent directory\n";
+        std::cout << "\tcurrent directory";
     }
+    std::cout << "\n";
     std::cout << PARAM_UNIQUE_DIR << " : " << is_enabled(hh_args.unique_dir) << "\n";
     if (!hh_args.unique_dir) {
         std::cout << " \tdo not create unique directory for the output\n";
     }
+    std::cout << PARAM_SUSPEND << " : " << is_enabled(hh_args.suspend_suspicious) << "\n";
+    if (!hh_args.suspend_suspicious) {
+        std::cout << "\tdo not suspend suspicious processes";
+    }
+    std::cout << "\n";
     std::cout << PARAM_KILL << " : " << is_enabled(hh_args.kill_suspicious) << "\n";
     if (!hh_args.kill_suspicious) {
         std::cout << "\tdo not kill suspicious processes";
@@ -242,12 +257,14 @@ void print_defaults()
     std::cout << "\n";
     std::cout << PARAM_QUIET << " : " << is_enabled(hh_args.quiet) << "\n";
     if (!hh_args.quiet) {
-        std::cout << " \tprint all the information on the screen\n";
+        std::cout << " \tprint all the information on the screen";
     }
+    std::cout << "\n";
     std::cout << PARAM_LOG << " : " << is_enabled(hh_args.log) << "\n";
     if (!hh_args.log) {
-        std::cout << " \tdo not add the results of the scan into the log file\n";
+        std::cout << " \tdo not add the results of the scan into the log file";
     }
+    std::cout << "\n";
 }
 
 void print_unknown_param(const char *param)
@@ -330,6 +347,9 @@ int main(int argc, char *argv[])
         }
         else if (!strcmp(argv[i], PARAM_LOOP)) {
             hh_args.loop_scanning = true;
+        }
+        else if (!strcmp(argv[i], PARAM_SUSPEND)) {
+            hh_args.suspend_suspicious = true;
         }
         else if (!strcmp(argv[i], PARAM_KILL)) {
             hh_args.kill_suspicious = true;
