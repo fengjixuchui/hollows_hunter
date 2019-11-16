@@ -1,12 +1,13 @@
 #include "hh_scanner.h"
 
 #include <iostream>
-#include <string.h>
+
 #include <fstream>
 #include <sstream>
 #include <time.h>
 
 #include "util\suspend.h"
+#include "util\util.h"
 
 using namespace pesieve;
 
@@ -98,10 +99,14 @@ size_t kill_suspicious(std::vector<DWORD> &suspicious_pids)
     return killed;
 }
 
-bool is_searched_process(const char* processName, const char* searchedName)
+bool is_searched_process(const char* processName, std::set<std::string> &names_list)
 {
-    if (_stricmp(processName, searchedName) == 0) {
-        return true;
+    std::set<std::string>::iterator itr;
+    for (itr = names_list.begin(); itr != names_list.end(); itr++) {
+        const char* searchedName = itr->c_str();
+        if (_stricmp(processName, searchedName) == 0) {
+            return true;
+        }
     }
     return false;
 }
@@ -119,6 +124,23 @@ void HHScanner::initOutDir(time_t start_time)
     }
 }
 
+std::string list_to_str(std::set<std::string> &list)
+{
+    std::stringstream stream;
+
+    std::set<std::string>::iterator itr;
+    for (itr = list.begin(); itr != list.end(); ) {
+        const std::string &next_str = *itr;
+        stream << next_str;
+        itr++;
+        if (itr != list.end()) {
+            stream << ", ";
+        }
+    }
+    return stream.str();
+}
+
+
 HHScanReport* HHScanner::scan()
 {
     const size_t max_processes = 1024;
@@ -131,6 +153,9 @@ HHScanReport* HHScanner::scan()
     if (cProcesses == 0) {
         return NULL;
     }
+
+    std::set<std::string> names_list;
+    strip_to_list(hh_args.pname, ";", names_list);
 
     time_t start_time = time(NULL);
     initOutDir(start_time);
@@ -145,7 +170,7 @@ HHScanReport* HHScanner::scan()
         get_process_name(pid, image_buf);
         
         if (hh_args.pname.length() > 0) {
-            if (!is_searched_process(image_buf, hh_args.pname.c_str())) {
+            if (!is_searched_process(image_buf, names_list)) {
                 //it is not the searched process, so skip it
                 continue;
             }
@@ -163,7 +188,7 @@ HHScanReport* HHScanner::scan()
     }
     if (!found && hh_args.pname.length() > 0) {
         if (!hh_args.quiet) {
-            std::cout << "[WARNING] Process with the name: " << hh_args.pname << " not found!" << std::endl;
+            std::cout << "[WARNING] No process from the list: {" << list_to_str(names_list) << "} was found!" << std::endl;
         }
     }
     my_report->setEndTick(GetTickCount(), time(NULL));
