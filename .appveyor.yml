@@ -16,24 +16,40 @@ build:
   verbosity: detailed
 
 configuration:
+  - Release
   - Debug
   
 environment:
+  artifactName: $(APPVEYOR_PROJECT_NAME)-$(APPVEYOR_REPO_COMMIT)-$(CONFIGURATION)
   matrix:
     - env_arch: "x64"
     - env_arch: "x86"
   
-build_script:
+before_build:
   - mkdir build
   - cd build
   - if [%env_arch%]==[x64] (
-      cmake .. -A x64 )
+    cmake .. -A x64 )
   - if [%env_arch%]==[x86] (
-      cmake .. )
-  - cmake --build . --target install
- 
+    cmake .. )
+  
+build_script:
+  - cmake --build . --config %CONFIGURATION% --target install
+  
+after_build:
+  - mkdir %artifactName%
+  - cp *.dll %artifactName%
+  - cp *.exe %artifactName%
+  - if [%CONFIGURATION%]==[Debug] (
+    cp -r %CONFIGURATION%/* %artifactName% )
+  - if [%CONFIGURATION%]==[Debug] (
+    cp -r pe-sieve/%CONFIGURATION%/* %artifactName% )
+  
 test_script:
   - ctest -V
+
+artifacts:
+  - path: build\%artifactName%
   
 on_failure:
   - dir
