@@ -11,7 +11,7 @@
 #include <pe_sieve_types.h>
 #include "params_info/pe_sieve_params_info.h"
 
-#define VERSION "0.2.4"
+#define VERSION "0.2.5"
 
 #define PARAM_SWITCH1 '/'
 #define PARAM_SWITCH2 '-'
@@ -20,7 +20,9 @@
 #define PARAM_SHELLCODE "shellc"
 #define PARAM_DATA "data"
 #define PARAM_MODULES_FILTER "mfilter"
+#define PARAM_MODULES_IGNORE "mignore"
 #define PARAM_PNAME "pname"
+#define PARAM_PID "pid"
 #define PARAM_LOOP "loop"
 
 //dump options:
@@ -44,7 +46,6 @@
 #define PARAM_VERSION  "version"
 #define PARAM_DEFAULTS "default"
 
-
 void print_param_in_color(int color, const std::string &text)
 {
     print_in_color(color, PARAM_SWITCH1 + text);
@@ -61,6 +62,17 @@ bool is_param(const char *str)
         return true;
     }
     return false;
+}
+
+//from paramkit
+size_t copyToCStr(char *buf, size_t buf_max, const std::string &value)
+{
+    size_t len = value.length() + 1;
+    if (len > buf_max) len = buf_max;
+
+    memcpy(buf, value.c_str(), buf_max);
+    buf[len] = '\0';
+    return len;
 }
 
 void print_logo()
@@ -90,8 +102,13 @@ void print_help()
     print_in_color(hdr_color, "Optional: \n");
     print_in_color(separator_color, "\n---scan options---\n");
 
+    print_param_in_color(param_color, PARAM_PID);
+    std::cout << " <target_pid>\n\t: Scan only processes with given PIDs (dec or hex, separated by '" << PARAM_LIST_SEPARATOR
+        << "').\n\tExample: 5367" << PARAM_LIST_SEPARATOR << "0xa90\n";
+
     print_param_in_color(param_color, PARAM_PNAME);
-    std::cout << " <process_name>\n\t: Scan only processes with given names (separated by ';').\n\tExample: iexplore.exe;firefox.exe\n";
+    std::cout << " <process_name>\n\t: Scan only processes with given names (separated by '" << PARAM_LIST_SEPARATOR 
+        << "').\n\tExample: iexplore.exe"<< PARAM_LIST_SEPARATOR<<"firefox.exe\n";
 
     print_param_in_color(param_color, PARAM_HOOKS);
     std::cout << "  : Detect hooks and in-memory patches.\n";
@@ -110,6 +127,9 @@ void print_help()
         std::cout << "\t" << i << " - " << translate_modules_filter(i) << "\n";
     }
 #endif
+    print_param_in_color(param_color, PARAM_MODULES_IGNORE);
+    std::cout << " <module_name>\n\t: Do not scan module/s with given name/s (separated by '" << PARAM_LIST_SEPARATOR << "').\n"
+        "\t  Example: kernel32.dll" << PARAM_LIST_SEPARATOR << "user32.dll\n";
 
     print_param_in_color(param_color, PARAM_LOOP);
     std::cout << "   : Enable continuous scanning.\n";
@@ -225,11 +245,17 @@ void print_defaults()
     hh_args_init(hh_args);
 
     std::cout << PARAM_PNAME << " : \"" << hh_args.pname << "\"" << "\n";
-    if (hh_args.pname.length() == 0) {
+    if (hh_args.pname.length() == 0 && hh_args.pids.length() == 0) {
         std::cout << "\tall running processes will be scanned\n";
     }
     else {
-        std::cout << "\tonly the process with name: " << hh_args.pname << " will be scanned\n";
+
+        std::cout << "\tonly the process with:\n";
+        if (hh_args.pname.length() == 0)
+            std::cout << "+ name(s): " << hh_args.pname << "\n";
+        if (hh_args.pids.length() == 0)
+            std::cout << "+ PID(s): " << hh_args.pids << "\n";
+        std::cout << " will be scanned\n";
     }
 
     std::cout << PARAM_HOOKS << " : " << is_enabled(!hh_args.pesieve_args.no_hooks) << "\n";
@@ -369,6 +395,10 @@ int main(int argc, char *argv[])
             }
             i++;
         }
+        else if (!strcmp(param, PARAM_MODULES_IGNORE) && (i + 1) < argc) {
+            copyToCStr(hh_args.pesieve_args.modules_ignored, MAX_MODULE_BUF_LEN, argv[i + 1]);
+            i++;
+        }
         else if (!strcmp(param, PARAM_HOOKS)) {
             hh_args.pesieve_args.no_hooks = false;
         }
@@ -403,6 +433,10 @@ int main(int argc, char *argv[])
         }
         else if (!strcmp(param, PARAM_PNAME) && (i + 1) < argc) {
             hh_args.pname = argv[i + 1];
+            i++;
+        }
+        else if (!strcmp(param, PARAM_PID) && (i + 1) < argc) {
+            hh_args.pids = argv[i + 1];
             i++;
         }
         else if (!strcmp(param, PARAM_QUIET)) {

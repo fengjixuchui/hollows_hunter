@@ -53,8 +53,10 @@ bool get_process_name(DWORD processID, CHAR szProcessName[MAX_PATH])
 {
     memset(szProcessName, 0, MAX_PATH);
 
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processID);
-    if (!hProcess) return false;
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, processID);
+    if (!hProcess) {
+        return false;
+    }
 
     HMODULE hMod = nullptr;
     DWORD cbNeeded = 0;
@@ -101,12 +103,25 @@ size_t kill_suspicious(std::vector<DWORD> &suspicious_pids)
     return killed;
 }
 
-bool is_searched_process(const char* processName, std::set<std::string> &names_list)
+bool is_searched_name(const char* processName, std::set<std::string> &names_list)
 {
     std::set<std::string>::iterator itr;
     for (itr = names_list.begin(); itr != names_list.end(); itr++) {
         const char* searchedName = itr->c_str();
         if (_stricmp(processName, searchedName) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_searched_pid(long pid, std::set<std::string> &pids_list)
+{
+    std::set<std::string>::iterator itr;
+    for (itr = pids_list.begin(); itr != pids_list.end(); itr++) {
+        const char* sPid = itr->c_str();
+        long number = get_number(sPid);
+        if (pid == number) {
             return true;
         }
     }
@@ -156,7 +171,10 @@ HHScanReport* HHScanner::scan()
     }
 
     std::set<std::string> names_list;
-    strip_to_list(hh_args.pname, ";", names_list);
+    std::set<std::string> pids_list;
+    std::string delim(1, PARAM_LIST_SEPARATOR);
+    strip_to_list(hh_args.pname, delim, names_list);
+    strip_to_list(hh_args.pids, delim, pids_list);
 
     time_t start_time = time(NULL);
     initOutDir(start_time);
@@ -170,30 +188,40 @@ HHScanReport* HHScanner::scan()
         char image_buf[MAX_PATH] = { 0 };
         get_process_name(pid, image_buf);
         
-        if (hh_args.pname.length() > 0) {
-            if (!is_searched_process(image_buf, names_list)) {
+        if (names_list.size() || pids_list.size()) {
+            if (!is_searched_name(image_buf, names_list) && !is_searched_pid(pid, pids_list)) {
                 //it is not the searched process, so skip it
                 continue;
             }
             found = true;
-            if (!hh_args.quiet) {
-                std::cout << image_buf << " (PID: " << std::dec << pid << ")\n";
-            }
         }
         if (!hh_args.quiet) {
-            std::cout << ">> Scanning PID: " << std::dec << pid << std::endl;
+            std::cout << ">> Scanning PID: " << std::dec << pid;
+            if (strlen(image_buf)) {
+                std::cout << " (" << image_buf << ")";
+            }
+            std::cout << std::endl;
         }
         hh_args.pesieve_args.pid = pid;
         pesieve::t_report report = PESieve_scan(hh_args.pesieve_args);
         my_report->appendReport(report, image_buf);
-        if (!hh_args.quiet && report.suspicious) {
-            int color = YELLOW_ON_BLACK;
-            if (report.replaced || report.implanted) {
-                color = RED_ON_BLACK;
+        int color = YELLOW;
+        if (!hh_args.quiet) {
+            if (report.scanned == 0) {
+                color = MAKE_COLOR(SILVER, DARK_RED);
+                set_color(color);
+                std::cout << ">> Could not access: " << std::dec << pid;
+                unset_color();
+                std::cout << "\n";
             }
-            set_color(color);
-            std::cout << ">> Detected: " << std::dec << pid << std::endl;
-            unset_color();
+            if (report.suspicious) {
+                if (report.replaced || report.implanted) {
+                    color = RED;
+                }
+                set_color(color);
+                std::cout << ">> Detected: " << std::dec << pid << std::endl;
+                unset_color();
+            }
         }
     }
     if (!found && hh_args.pname.length() > 0) {
