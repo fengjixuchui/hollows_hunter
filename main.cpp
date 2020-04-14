@@ -11,11 +11,12 @@
 #include <pe_sieve_types.h>
 #include "params_info/pe_sieve_params_info.h"
 
-#define VERSION "0.2.5"
+#define VERSION "0.2.6"
 
 #define PARAM_SWITCH1 '/'
 #define PARAM_SWITCH2 '-'
 //scan options:
+#define PARAM_IAT "iat"
 #define PARAM_HOOKS "hooks"
 #define PARAM_SHELLCODE "shellc"
 #define PARAM_DATA "data"
@@ -44,6 +45,7 @@
 #define PARAM_HELP "help"
 #define PARAM_HELP2  "?"
 #define PARAM_VERSION  "version"
+#define PARAM_VERSION2  "ver"
 #define PARAM_DEFAULTS "default"
 
 void print_param_in_color(int color, const std::string &text)
@@ -111,7 +113,14 @@ void print_help()
         << "').\n\tExample: iexplore.exe"<< PARAM_LIST_SEPARATOR<<"firefox.exe\n";
 
     print_param_in_color(param_color, PARAM_HOOKS);
-    std::cout << "  : Detect hooks and in-memory patches.\n";
+    std::cout << "  : Detect inline hooks and in-memory patches.\n";
+
+    print_param_in_color(param_color, PARAM_IAT);
+    std::cout << " <*scan_mode>\n\t: Scan for IAT hooks.\n";
+    std::cout << "*scan_mode:\n";
+    for (size_t i = 0; i < pesieve::PE_IATS_MODES_COUNT; i++) {
+        std::cout << "\t" << i << " - " << translate_iat_scan_mode((pesieve::t_iat_scan_mode) i) << "\n";
+    }
 
     print_param_in_color(param_color, PARAM_SHELLCODE);
     std::cout << "\t: Detect shellcode implants. (By default it detects PE only).\n";
@@ -369,7 +378,7 @@ int main(int argc, char *argv[])
             print_help();
             return 0;
         }
-        if (!strcmp(param, PARAM_VERSION)) {
+        if (!strcmp(param, PARAM_VERSION) || !strcmp(param, PARAM_VERSION2)) {
             print_version();
             return 0;
         }
@@ -407,6 +416,16 @@ int main(int argc, char *argv[])
         }
         else if (!strcmp(param, PARAM_DATA)) {
             hh_args.pesieve_args.data = true;
+        }
+        else if (!strcmp(param, PARAM_IAT)) {
+            hh_args.pesieve_args.iat = pesieve::PE_IATS_FILTERED;
+            if ((i + 1) < argc) {
+                char* mode_num = argv[i + 1];
+                if (isdigit(mode_num[0])) {
+                    hh_args.pesieve_args.iat = (pesieve::t_iat_scan_mode)atoi(mode_num);
+                    ++i;
+                }
+            }
         }
         else if (!strcmp(param, PARAM_DUMP_MODE) && (i + 1) < argc) {
             hh_args.pesieve_args.dump_mode = normalize_dump_mode(atoi(argv[i + 1]));
