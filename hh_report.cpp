@@ -61,10 +61,10 @@ size_t HHScanReport::reportsToJSON(std::stringstream &stream, size_t level, cons
 
         OUT_PADDED(stream, level, "\"pid\" : ");
         stream << std::dec << pid << ",\n";
-        OUT_PADDED(stream, level, "\"name\" : ");
-        stream << "\"" << this->pidToName[pid] << "\",\n";
         OUT_PADDED(stream, level, "\"is_managed\" : ");
         stream << std::dec << pidToReport[pid].is_managed << ",\n";
+        OUT_PADDED(stream, level, "\"name\" : ");
+        stream << "\"" << this->pidToName[pid] << "\",\n";
         OUT_PADDED(stream, level, "\"replaced\" : ");
         stream << std::dec << pidToReport[pid].replaced << ",\n";
         OUT_PADDED(stream, level, "\"hdr_modified\" : ");
@@ -77,8 +77,10 @@ size_t HHScanReport::reportsToJSON(std::stringstream &stream, size_t level, cons
             OUT_PADDED(stream, level, "\"iat_hooked\" : ");
             stream << std::dec << pidToReport[pid].iat_hooked << ",\n";
         }
-        OUT_PADDED(stream, level, "\"implanted\" : ");
-        stream << std::dec << pidToReport[pid].implanted << ",\n";
+        OUT_PADDED(stream, level, "\"implanted_pe\" : ");
+        stream << std::dec << pidToReport[pid].implanted_pe << ",\n";
+        OUT_PADDED(stream, level, "\"implanted_shc\" : ");
+        stream << std::dec << pidToReport[pid].implanted_shc << ",\n";
         OUT_PADDED(stream, level, "\"detached\" : ");
         stream << std::dec << pidToReport[pid].detached << "\n";
 
