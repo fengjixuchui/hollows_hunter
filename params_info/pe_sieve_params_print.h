@@ -3,6 +3,7 @@
 #include <iostream>
 #include <pe_sieve_types.h>
 
+#include "params_list.h"
 #include "pe_sieve_params_info.h"
 
 void print_dnet_param(int param_color);
@@ -23,3 +24,4 @@ void print_mignore_param(int param_color);
 
 void print_refl_param(int param_color);
 
+void print_data_param(int param_color);

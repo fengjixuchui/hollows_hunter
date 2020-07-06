@@ -12,17 +12,20 @@
 #include "params_info/param_base.h"
 #include "util/process_privilege.h"
 
-#define VERSION "0.2.7.1"
+#define VERSION "0.2.7.2"
 
-//from paramkit
-size_t copyToCStr(char *buf, size_t buf_max, const std::string &value)
+void print_pid_param(int param_color)
 {
-    size_t len = value.length() + 1;
-    if (len > buf_max) len = buf_max;
+    print_param_in_color(param_color, PARAM_PID);
+    std::cout << " <target_pid>\n\t: Scan only processes with given PIDs (dec or hex, separated by '" << PARAM_LIST_SEPARATOR
+        << "').\n\tExample: 5367" << PARAM_LIST_SEPARATOR << "0xa90\n";
+}
 
-    memcpy(buf, value.c_str(), len);
-    buf[len] = '\0';
-    return len;
+void print_pname_param(int param_color)
+{
+    print_param_in_color(param_color, PARAM_PNAME);
+    std::cout << " <process_name>\n\t: Scan only processes with given names (separated by '" << PARAM_LIST_SEPARATOR
+        << "').\n\tExample: iexplore.exe" << PARAM_LIST_SEPARATOR << "firefox.exe\n";
 }
 
 void print_logo()
@@ -53,13 +56,8 @@ void print_help()
     print_in_color(hdr_color, "Optional: \n");
     print_in_color(separator_color, "\n---scan options---\n");
 
-    print_param_in_color(param_color, PARAM_PID);
-    std::cout << " <target_pid>\n\t: Scan only processes with given PIDs (dec or hex, separated by '" << PARAM_LIST_SEPARATOR
-        << "').\n\tExample: 5367" << PARAM_LIST_SEPARATOR << "0xa90\n";
-
-    print_param_in_color(param_color, PARAM_PNAME);
-    std::cout << " <process_name>\n\t: Scan only processes with given names (separated by '" << PARAM_LIST_SEPARATOR 
-        << "').\n\tExample: iexplore.exe"<< PARAM_LIST_SEPARATOR<<"firefox.exe\n";
+    print_pid_param(param_color);
+    print_pname_param(param_color);
 
     print_param_in_color(param_color, PARAM_HOOKS);
     std::cout << "  : Detect inline hooks and in-memory patches.\n";
@@ -68,8 +66,7 @@ void print_help()
 
     print_shellc_param(param_color);
 
-    print_param_in_color(param_color, PARAM_DATA);
-    std::cout << "\t: If DEP is disabled scan also non-executable memory\n\t(which potentially can be executed).\n";
+    print_data_param(param_color);
 
 #ifdef _WIN64
     print_module_filter_param(param_color);
@@ -281,10 +278,11 @@ int main(int argc, char *argv[])
 {
     t_hh_params hh_args;
     hh_args_init(hh_args);
+    bool info_req = false;
 
     //Parse parameters
     for (int i = 1; i < argc; i++) {
-        if (!is_param(argv[i])) {
+        if (!info_req && !is_param(argv[i])) {
             print_logo();
             print_version();
             std::cout << "\n";
@@ -310,63 +308,99 @@ int main(int argc, char *argv[])
             print_defaults();
             return 0;
         }
-        else if (!strcmp(param, PARAM_IMP_REC)) {
-            hh_args.pesieve_args.imprec_mode = pesieve::PE_IMPREC_AUTO;
-            if ((i + 1) < argc) {
-                char* mode_num = argv[i + 1];
-                if (isdigit(mode_num[0])) {
-                    hh_args.pesieve_args.imprec_mode = normalize_imprec_mode(atoi(mode_num));
-                    ++i;
-                }
-            }
+        if (get_int_param(argc, argv, param, i, 
+            PARAM_IMP_REC,
+            hh_args.pesieve_args.imprec_mode, 
+            pesieve::PE_IMPREC_AUTO, 
+            info_req, 
+            print_imprec_param))
+        {
+            continue;
         }
-        else if (!strcmp(param, PARAM_MODULES_FILTER) && (i + 1) < argc) {
-            hh_args.pesieve_args.modules_filter = atoi(argv[i + 1]);
-            if (hh_args.pesieve_args.modules_filter > LIST_MODULES_ALL) {
-                hh_args.pesieve_args.modules_filter = LIST_MODULES_ALL;
-            }
-            i++;
+        else if (get_int_param<DWORD>(argc, argv, param, i,
+            PARAM_MODULES_FILTER,
+            hh_args.pesieve_args.modules_filter,
+            LIST_MODULES_ALL,
+            info_req,
+            print_module_filter_param))
+        {
+            continue;
         }
-        else if (!strcmp(param, PARAM_MODULES_IGNORE) && (i + 1) < argc) {
-            copyToCStr(hh_args.pesieve_args.modules_ignored, MAX_MODULE_BUF_LEN, argv[i + 1]);
-            i++;
+        else if (get_cstr_param(argc, argv, param, i,
+            PARAM_MODULES_IGNORE,
+            hh_args.pesieve_args.modules_ignored,
+            MAX_MODULE_BUF_LEN,
+            info_req,
+            print_mignore_param))
+        {
+            continue;
         }
         else if (!strcmp(param, PARAM_HOOKS)) {
             hh_args.pesieve_args.no_hooks = false;
         }
-        else if (!strcmp(param, PARAM_SHELLCODE)) {
-            hh_args.pesieve_args.shellcode = true;
+        else if (get_int_param(argc, argv, param, i,
+            PARAM_DATA,
+            hh_args.pesieve_args.data,
+            pesieve::PE_DATA_SCAN_NO_DEP,
+            info_req,
+            print_data_param))
+        {
+            continue;
         }
-        else if (!strcmp(param, PARAM_DATA)) {
-            hh_args.pesieve_args.data = true;
+        else if (get_int_param(argc, argv, param, i,
+            PARAM_SHELLCODE,
+            hh_args.pesieve_args.shellcode,
+            true,
+            info_req,
+            print_shellc_param))
+        {
+            continue;
         }
-        else if (!strcmp(param, PARAM_IAT)) {
-            hh_args.pesieve_args.iat = pesieve::PE_IATS_FILTERED;
-            if ((i + 1) < argc) {
-                char* mode_num = argv[i + 1];
-                if (isdigit(mode_num[0])) {
-                    hh_args.pesieve_args.iat = (pesieve::t_iat_scan_mode)atoi(mode_num);
-                    ++i;
-                }
-            }
+        else if (get_int_param(argc, argv, param, i,
+            PARAM_IAT,
+            hh_args.pesieve_args.iat,
+            pesieve::PE_IATS_FILTERED,
+            info_req,
+            print_iat_param))
+        {
+            continue;
         }
-        else if (!strcmp(param, PARAM_DOTNET_POLICY)) {
-            hh_args.pesieve_args.dotnet_policy = pesieve::PE_DNET_SKIP_SHC;
-            if ((i + 1) < argc) {
-                char* mode_num = argv[i + 1];
-                if (isdigit(mode_num[0])) {
-                    hh_args.pesieve_args.dotnet_policy = (pesieve::t_dotnet_policy)atoi(mode_num);
-                }
-                ++i;
-            }
+        else if (get_int_param(argc, argv, param, i,
+            PARAM_DOTNET_POLICY,
+            hh_args.pesieve_args.dotnet_policy,
+            pesieve::PE_DNET_SKIP_SHC,
+            info_req,
+            print_dnet_param))
+        {
+            continue;
         }
-        else if (!strcmp(param, PARAM_DUMP_MODE) && (i + 1) < argc) {
-            hh_args.pesieve_args.dump_mode = normalize_dump_mode(atoi(argv[i + 1]));
-            i++;
+        else if (get_int_param(argc, argv, param, i,
+            PARAM_DUMP_MODE,
+            hh_args.pesieve_args.dump_mode,
+            pesieve::PE_DUMP_AUTO,
+            info_req,
+            print_dmode_param))
+        {
+            hh_args.pesieve_args.dump_mode = normalize_dump_mode(hh_args.pesieve_args.dump_mode);
+            continue;
         }
-        else if (!strcmp(param, PARAM_OUT_FILTER) && (i + 1) < argc) {
-            hh_args.pesieve_args.out_filter = static_cast<pesieve::t_output_filter>(atoi(argv[i + 1]));
-            i++;
+        else if (get_int_param(argc, argv, param, i,
+            PARAM_OUT_FILTER,
+            hh_args.pesieve_args.out_filter,
+            pesieve::OUT_FULL,
+            info_req,
+            print_out_filter_param))
+        {
+            continue;
+        }
+        else if (get_int_param(argc, argv, param, i,
+            PARAM_REFLECTION,
+            hh_args.pesieve_args.make_reflection,
+            true,
+            info_req,
+            print_refl_param))
+        {
+            continue;
         }
         else if (!strcmp(param, PARAM_LOG)) {
             hh_args.log = true;
@@ -383,13 +417,21 @@ int main(int argc, char *argv[])
         else if (!strcmp(param, PARAM_KILL)) {
             hh_args.kill_suspicious = true;
         }
-        else if (!strcmp(param, PARAM_PNAME) && (i + 1) < argc) {
-            hh_args.pname = argv[i + 1];
-            i++;
+        else if (get_string_param(argc, argv, param, i,
+            PARAM_PNAME,
+            hh_args.pname,
+            info_req,
+            print_pname_param))
+        {
+            continue;
         }
-        else if (!strcmp(param, PARAM_PID) && (i + 1) < argc) {
-            hh_args.pids = argv[i + 1];
-            i++;
+        else if (get_string_param(argc, argv, param, i,
+            PARAM_PID,
+            hh_args.pids,
+            info_req,
+            print_pid_param))
+        {
+            continue;
         }
         else if (!strcmp(param, PARAM_QUIET)) {
             hh_args.quiet = true;
@@ -404,17 +446,16 @@ int main(int argc, char *argv[])
         else if (!strcmp(param, PARAM_MINIDUMP)) {
             hh_args.pesieve_args.minidump = true;
         }
-        else if (!strcmp(param, PARAM_REFLECTION)) {
-            hh_args.pesieve_args.make_reflection = true;
-        }
-        else if (strlen(argv[i]) > 0) {
+        else if (!info_req && strlen(argv[i]) > 0) {
             print_unknown_param(argv[i]);
             print_in_color(HILIGHTED_COLOR, "Available parameters:\n\n");
             print_help();
             return 0;
         }
     }
-
+    if (info_req) {
+        return 0;
+    }
     print_version();
     deploy_scan(hh_args);
     return 0;
