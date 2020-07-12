@@ -12,6 +12,23 @@
 
 using namespace pesieve;
 
+bool is_wow_64(HANDLE process)
+{
+    FARPROC procPtr = GetProcAddress(GetModuleHandleA("kernel32"), "IsWow64Process");
+    if (!procPtr) {
+        //this system does not have a function IsWow64Process
+        return false;
+    }
+    BOOL(WINAPI * is_process_wow64)(IN HANDLE, OUT PBOOL)
+        = (BOOL(WINAPI*)(IN HANDLE, OUT PBOOL))procPtr;
+
+    BOOL isCurrWow64 = FALSE;
+    if (!is_process_wow64(process, &isCurrWow64)) {
+        return false;
+    }
+    return isCurrWow64 ? true : false;
+}
+
 std::string join_path(const std::string &baseDir, const std::string &subpath)
 {
     std::stringstream stream;
@@ -49,7 +66,7 @@ bool set_output_dir(t_params &args, const std::string &new_dir)
     return true;
 }
 
-bool get_process_name(DWORD processID, CHAR szProcessName[MAX_PATH])
+bool get_process_info(DWORD processID, CHAR szProcessName[MAX_PATH], bool &isWow64)
 {
     memset(szProcessName, 0, MAX_PATH);
 
@@ -65,6 +82,7 @@ bool get_process_name(DWORD processID, CHAR szProcessName[MAX_PATH])
         GetModuleBaseNameA(hProcess, hMod, szProcessName, MAX_PATH);
         is_ok = true;
     }
+    isWow64 = is_wow_64(hProcess);
     CloseHandle(hProcess);
     return is_ok;
 }
@@ -73,7 +91,7 @@ size_t suspend_suspicious(std::vector<DWORD> &suspicious_pids)
 {
     size_t done = 0;
     std::vector<DWORD>::iterator itr;
-    for (itr = suspicious_pids.begin(); itr != suspicious_pids.end(); itr++) {
+    for (itr = suspicious_pids.begin(); itr != suspicious_pids.end(); ++itr) {
         DWORD pid = *itr;
         if (!suspend_process(pid)) {
             std::cerr << "Could not suspend the process. PID = " << pid << std::endl;
@@ -86,7 +104,7 @@ size_t kill_suspicious(std::vector<DWORD> &suspicious_pids)
 {
     size_t killed = 0;
     std::vector<DWORD>::iterator itr;
-    for (itr = suspicious_pids.begin(); itr != suspicious_pids.end(); itr++) {
+    for (itr = suspicious_pids.begin(); itr != suspicious_pids.end(); ++itr) {
         DWORD pid = *itr;
         HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
         if (!hProcess) {
@@ -106,7 +124,7 @@ size_t kill_suspicious(std::vector<DWORD> &suspicious_pids)
 bool is_searched_name(const char* processName, std::set<std::string> &names_list)
 {
     std::set<std::string>::iterator itr;
-    for (itr = names_list.begin(); itr != names_list.end(); itr++) {
+    for (itr = names_list.begin(); itr != names_list.end(); ++itr) {
         const char* searchedName = itr->c_str();
         if (_stricmp(processName, searchedName) == 0) {
             return true;
@@ -118,7 +136,7 @@ bool is_searched_name(const char* processName, std::set<std::string> &names_list
 bool is_searched_pid(long pid, std::set<std::string> &pids_list)
 {
     std::set<std::string>::iterator itr;
-    for (itr = pids_list.begin(); itr != pids_list.end(); itr++) {
+    for (itr = pids_list.begin(); itr != pids_list.end(); ++itr) {
         const char* sPid = itr->c_str();
         long number = get_number(sPid);
         if (pid == number) {
@@ -126,6 +144,16 @@ bool is_searched_pid(long pid, std::set<std::string> &pids_list)
         }
     }
     return false;
+}
+
+bool HHScanner::isScannerCompatibile()
+{
+#ifndef _WIN64
+    if (is_wow_64(GetCurrentProcess())) {
+        return false;
+    }
+#endif
+    return true;
 }
 
 void HHScanner::initOutDir(time_t start_time)
@@ -149,7 +177,7 @@ std::string list_to_str(std::set<std::string> &list)
     for (itr = list.begin(); itr != list.end(); ) {
         const std::string &next_str = *itr;
         stream << next_str;
-        itr++;
+        ++itr;
         if (itr != list.end()) {
             stream << ", ";
         }
@@ -169,7 +197,10 @@ HHScanReport* HHScanner::scan()
     if (cProcesses == 0) {
         return NULL;
     }
-
+    bool isScanner64b = false;
+#ifdef _WIN64
+    isScanner64b = true;
+#endif
     std::set<std::string> names_list;
     std::set<std::string> pids_list;
     std::string delim(1, PARAM_LIST_SEPARATOR);
@@ -183,10 +214,11 @@ HHScanReport* HHScanner::scan()
     bool found = false;
     for (size_t i = 0; i < cProcesses; i++) {
         if (aProcesses[i] == 0) continue;
-        
+
         DWORD pid = aProcesses[i];
         char image_buf[MAX_PATH] = { 0 };
-        get_process_name(pid, image_buf);
+        bool is_process_wow64 = false;
+        get_process_info(pid, image_buf, is_process_wow64);
         
         if (names_list.size() || pids_list.size()) {
             if (!is_searched_name(image_buf, names_list) && !is_searched_pid(pid, pids_list)) {
@@ -198,23 +230,35 @@ HHScanReport* HHScanner::scan()
         if (!hh_args.quiet) {
             std::cout << ">> Scanning PID: " << std::dec << pid;
             if (strlen(image_buf)) {
-                std::cout << " (" << image_buf << ")";
+                std::cout << " : " << image_buf;
+            }
+            if (is_process_wow64) {
+                std::cout << " : 32" ;
             }
             std::cout << std::endl;
         }
         hh_args.pesieve_args.pid = pid;
         pesieve::t_report report = PESieve_scan(hh_args.pesieve_args);
         my_report->appendReport(report, image_buf);
-        int color = YELLOW;
+        
         if (!hh_args.quiet) {
-            if (report.scanned == 0) {
-                color = MAKE_COLOR(SILVER, DARK_RED);
-                WORD old_color = set_color(color);
-                std::cout << ">> Could not access: " << std::dec << pid;
+            if (report.errors == pesieve::ERROR_SCAN_FAILURE) {
+                WORD old_color = set_color(MAKE_COLOR(SILVER, DARK_RED));
+                if (report.errors == pesieve::ERROR_SCAN_FAILURE) {
+                    std::cout << "[!] Could not access: " << std::dec << pid;
+                }
+                set_color(old_color);
+                std::cout << std::endl;
+                continue;
+            }
+            if (!isScanner64b && report.is_64bit) {
+                WORD old_color = set_color(MAKE_COLOR(SILVER, DARK_RED));
+                std::cout << "[!] Partial scan: " << std::dec << pid << ", the target is " << (report.is_64bit ? 64 : 32) << "-bit";
                 set_color(old_color);
                 std::cout << std::endl;
             }
             if (report.suspicious) {
+                int color = YELLOW;
                 if (report.replaced || report.implanted) {
                     color = RED;
                 }
