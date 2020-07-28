@@ -12,7 +12,7 @@
 #include "params_info/param_base.h"
 #include "util/process_privilege.h"
 
-#define VERSION "0.2.8"
+#define VERSION "0.2.8.6"
 
 
 void compatibility_alert()
@@ -233,8 +233,8 @@ void print_defaults()
         std::cout << "\t do not scan for shellcodes";
     }
     std::cout << "\n";
-    std::cout << PARAM_DATA << " : " << is_enabled(hh_args.pesieve_args.data) << "\n";
-    if (!hh_args.pesieve_args.data) {
+    std::cout << PARAM_DATA << " : " << hh_args.pesieve_args.data << "\n";
+    if (hh_args.pesieve_args.data == pesieve::PE_DATA_NO_SCAN) {
         std::cout << "\t scan only the memory areas that are set as executable";
     }
     std::cout << "\n";
@@ -413,7 +413,7 @@ int main(int argc, char *argv[])
         else if (get_int_param(argc, argv, param, i,
             PARAM_DOTNET_POLICY,
             hh_args.pesieve_args.dotnet_policy,
-            pesieve::PE_DNET_SKIP_SHC,
+            pesieve::PE_DNET_SKIP_MAPPING,
             info_req,
             print_dnet_param))
         {
