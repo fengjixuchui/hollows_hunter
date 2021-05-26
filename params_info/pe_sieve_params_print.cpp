@@ -89,6 +89,12 @@ void print_refl_param(int param_color)
     std::cout << "\t: Make a process reflection before scan.\n";
 }
 
+void print_ptimes_param(int param_color)
+{
+    print_param_in_color(param_color, PARAM_PTIMES);
+    std::cout << " <N seconds>\n\t: Scan only processes created N seconds before HH, or later.\n";
+}
+
 void print_data_param(int param_color)
 {
     print_param_in_color(param_color, PARAM_DATA);
@@ -103,6 +109,16 @@ void print_json_param(int param_color)
 {
     print_param_in_color(param_color, PARAM_JSON);
     std::cout << "\t: Print the JSON report as the summary.\n";
+}
+
+void print_json_level_param(int param_color)
+{
+    print_param_in_color(param_color, PARAM_JSON_LVL);
+    std::cout << " <*json_lvl>\n\t: Level of details of the JSON scan_report.\n";
+    std::cout << "*json_lvl:\n";
+    for (DWORD i = 0; i < pesieve::JSON_LVL_COUNT; i++) {
+        std::cout << "\t" << i << " - " << translate_json_level((pesieve::t_json_level) i) << "\n";
+    }
 }
 
 void print_quiet_param(int param_color)

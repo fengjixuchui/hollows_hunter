@@ -1,6 +1,7 @@
 cmake_minimum_required (VERSION 2.8)
 project (hollows_hunter)
-option(HH_BUILD_TESTING "enable testing for peconv" ON)
+
+option(HH_BUILD_TESTING "Enable testing for HollowsHunter" ON)
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 
@@ -35,6 +36,8 @@ set (srcs
 	util/suspend.cpp
 	util/util.cpp
 	util/process_privilege.cpp
+	util/time_util.cpp
+	util/strings_util.cpp
 )
 
 set (hdrs
@@ -51,6 +54,8 @@ set (hdrs
 	util/ntddk.h
 	util/util.h
 	util/process_privilege.h
+	util/time_util.h
+	util/strings_util.h
 )
 
 # libs

@@ -24,9 +24,13 @@ void print_mignore_param(int param_color);
 
 void print_refl_param(int param_color);
 
+void print_ptimes_param(int param_color);
+
 void print_data_param(int param_color);
 
 void print_json_param(int param_color);
+
+void print_json_level_param(int param_color);
 
 void print_quiet_param(int param_color);
 

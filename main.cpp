@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include <string>
+#include <map>
 #include <vector>
 
 #include <sstream>
@@ -11,9 +12,11 @@
 #include "params_info/pe_sieve_params_print.h"
 #include "params_info/param_base.h"
 #include "util/process_privilege.h"
+#include "util/strings_util.h"
 
-#define VERSION "0.2.9"
+#define VERSION "0.2.9.6"
 
+using namespace hhunter::util;
 
 void compatibility_alert()
 {
@@ -99,52 +102,113 @@ void print_logo()
     set_color(old_color);
 }
 
-void print_help()
+size_t print_params_block(std::string block_name, std::map<std::string, void(*)(int)> params_block, const std::string &filter)
+{
+    const int hdr_color = HEADER_COLOR;
+    const int param_color = HILIGHTED_COLOR;
+    const int separator_color = SEPARATOR_COLOR;
+
+    const bool has_filter = filter.length() > 0 ? true : false;
+    bool has_any = false;
+
+    std::map<std::string, void(*)(int)>::iterator itr;
+    for (itr = params_block.begin(); itr != params_block.end();itr++) {
+        const std::string &param = itr->first;
+        if (has_filter) {
+            stringsim_type sim_type = is_string_similar(param, filter);
+            if (sim_type != SIM_NONE) has_any = true;
+        }
+        else {
+            has_any = true;
+        }
+    }
+    if (!has_any) return 0;
+
+    int p_color = param_color;
+    if (block_name.length()) {
+        print_in_color(separator_color, "\n---" + block_name + "---\n");
+    }
+    size_t counter = 0;
+    for (itr = params_block.begin(); itr != params_block.end();itr++) {
+        const std::string &param = itr->first;
+        if (filter.length() > 0) {
+            const stringsim_type sim_type = is_string_similar(param, filter);
+            p_color = (sim_type != SIM_NONE) ? ERROR_COLOR : param_color;
+            if (sim_type == SIM_NONE) continue;
+        }
+        void(*info)(int) = itr->second;
+        if (!info) continue;
+        info(p_color);
+        counter++;
+    }
+    if (has_filter) {
+        print_in_color(INACTIVE_COLOR, "\n[...]\n");
+    }
+    return counter;
+}
+
+void print_help(std::string filter="")
 {
     const int hdr_color = HEADER_COLOR;
     const int param_color = HILIGHTED_COLOR;
     const int separator_color = SEPARATOR_COLOR;
 
     print_in_color(hdr_color, "Optional: \n");
-    print_in_color(separator_color, "\n---scan options---\n");
+    size_t cntr = 0;
 
-    print_pid_param(param_color);
-    print_pname_param(param_color);
-    print_hooks_param(param_color);
-    print_iat_param(param_color);
-    print_shellc_param(param_color);
-    print_data_param(param_color);
+    std::map<std::string, void(*)(int)> scan_params;
+    std::map<std::string, void(*)(int)> scan_target_params;
+    std::map<std::string, void(*)(int)> scanner_params;
+    std::map<std::string, void(*)(int)> scan_exclusions;
 
+    scan_target_params[PARAM_PID] = print_pid_param;
+    scan_target_params[PARAM_PNAME] = print_pname_param;
+    scan_params[PARAM_HOOKS] = print_hooks_param;
+
+    scan_params[PARAM_IAT] = print_iat_param;
+    scan_params[PARAM_SHELLCODE] = print_shellc_param;
+    scan_params[PARAM_DATA] = print_data_param;
+    
 #ifdef _WIN64
-    print_module_filter_param(param_color);
+    scan_exclusions[PARAM_MODULES_FILTER] = print_module_filter_param;
 #endif
 
-    print_mignore_param(param_color);
-    print_loop_param(param_color);
+    scan_exclusions[PARAM_MODULES_IGNORE] = print_mignore_param;
 
-    print_refl_param(param_color);
-    print_dnet_param(param_color);
+    scan_exclusions[PARAM_DOTNET_POLICY] = print_dnet_param;
+    scan_target_params[PARAM_PTIMES] = print_ptimes_param;
 
-    print_in_color(separator_color, "\n---dump options---\n");
+    scanner_params[PARAM_LOOP] = print_loop_param;
+    scanner_params[PARAM_REFLECTION] = print_refl_param;
+    scanner_params[PARAM_QUIET] = print_quiet_param;
 
-    print_imprec_param(param_color);
-    print_dmode_param(param_color);
+    cntr += print_params_block("scan targets", scan_target_params, filter);
+    cntr += print_params_block("scanner settings", scanner_params, filter);
+    cntr += print_params_block("scan exclusions", scan_exclusions, filter);
+    cntr += print_params_block("scan options", scan_params, filter);
 
-    print_in_color(separator_color, "\n---output options---\n");
+    std::map<std::string, void(*)(int)> dump_params;
+    dump_params[PARAM_IMP_REC] = print_imprec_param;
+    dump_params[PARAM_DUMP_MODE] = print_dmode_param;
+    dump_params[PARAM_MINIDUMP] = print_minidump_param;
+    cntr += print_params_block("dump options", dump_params, filter);
 
-    print_out_filter_param(param_color);
-    print_output_dir_param(param_color);
-    print_uniqd_param(param_color);
-    print_minidump_param(param_color);
+    std::map<std::string, void(*)(int)> post_scan_params;
+    post_scan_params[PARAM_SUSPEND] = print_suspend_param;
+    post_scan_params[PARAM_KILL] = print_kill_param;
+    cntr += print_params_block("post-scan actions", post_scan_params, filter);
 
-    print_suspend_param(param_color);
-    print_kill_param(param_color);
-
-    print_quiet_param(param_color);
-    print_log_param(param_color);
-
-    print_json_param(param_color);
-
+    std::map<std::string, void(*)(int)> out_params;
+    out_params[PARAM_OUT_FILTER] = print_out_filter_param;
+    out_params[PARAM_DIR] = print_output_dir_param;
+    out_params[PARAM_UNIQUE_DIR] = print_uniqd_param;
+    out_params[PARAM_LOG] = print_log_param;
+    out_params[PARAM_JSON] = print_json_param;
+    out_params[PARAM_JSON_LVL] = print_json_level_param;
+    cntr += print_params_block("output options", out_params, filter);
+    if (cntr == 0) {
+        print_in_color(INACTIVE_COLOR, "\n[...]\n");
+    }
     print_in_color(hdr_color, "\nInfo: \n\n");
 
     print_param_in_color(param_color, PARAM_HELP);
@@ -298,8 +362,8 @@ void print_unknown_param(const char *param)
 void deploy_scan(t_hh_params &hh_args)
 {
     hhunter::util::set_debug_privilege();
+    HHScanner hhunter(hh_args);
     do {
-        HHScanner hhunter(hh_args);
         HHScanReport *report = hhunter.scan();
         if (report) {
             hhunter.summarizeScan(report);
@@ -324,8 +388,8 @@ int main(int argc, char *argv[])
             print_version();
             std::cout << "\n";
             print_unknown_param(argv[i]);
-            print_in_color(HILIGHTED_COLOR, "Available parameters:\n\n");
-            print_help();
+            print_in_color(HILIGHTED_COLOR, "Similar parameters:\n\n");
+            print_help(argv[i]);
             return 0;
         }
         const char *param = &argv[i][1];
@@ -448,6 +512,15 @@ int main(int argc, char *argv[])
             continue;
         }
         else if (get_int_param(argc, argv, param, i,
+            PARAM_PTIMES,
+            hh_args.ptimes,
+            TIME_UNDEFINED,
+            info_req,
+            print_ptimes_param))
+        {
+            continue;
+        }
+        else if (get_int_param(argc, argv, param, i,
             PARAM_LOG,
             hh_args.log,
             true,
@@ -544,10 +617,20 @@ int main(int argc, char *argv[])
         {
             continue;
         }
+        else if (get_int_param(argc, argv, param, i,
+            PARAM_JSON_LVL,
+            hh_args.pesieve_args.json_lvl,
+            pesieve::JSON_BASIC,
+            info_req,
+            print_json_level_param))
+        {
+            hh_args.pesieve_args.json_lvl = normalize_json_level(hh_args.pesieve_args.json_lvl);
+            continue;
+        }
         else if (!info_req && strlen(argv[i]) > 0) {
             print_unknown_param(argv[i]);
-            print_in_color(HILIGHTED_COLOR, "Available parameters:\n\n");
-            print_help();
+            print_in_color(HILIGHTED_COLOR, "Similar parameters:\n\n");
+            print_help(param);
             return 0;
         }
     }
