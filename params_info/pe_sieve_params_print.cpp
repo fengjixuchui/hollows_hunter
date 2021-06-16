@@ -66,16 +66,6 @@ void print_shellc_param(int param_color)
     std::cout << "\t: Detect shellcode implants. (By default it detects PE only).\n";
 }
 
-void print_module_filter_param(int param_color)
-{
-    print_param_in_color(param_color, PARAM_MODULES_FILTER);
-    std::cout << " <*mfilter_id>\n\t: Filter the scanned modules.\n";
-    std::cout << "*mfilter_id:\n";
-    for (DWORD i = 0; i <= LIST_MODULES_ALL; i++) {
-        std::cout << "\t" << i << " - " << translate_modules_filter(i) << "\n";
-    }
-}
-
 void print_mignore_param(int param_color)
 {
     print_param_in_color(param_color, PARAM_MODULES_IGNORE);
@@ -87,12 +77,6 @@ void print_refl_param(int param_color)
 {
     print_param_in_color(param_color, PARAM_REFLECTION);
     std::cout << "\t: Make a process reflection before scan.\n";
-}
-
-void print_ptimes_param(int param_color)
-{
-    print_param_in_color(param_color, PARAM_PTIMES);
-    std::cout << " <N seconds>\n\t: Scan only processes created N seconds before HH, or later.\n";
 }
 
 void print_data_param(int param_color)

@@ -14,7 +14,7 @@
 #include "util/process_privilege.h"
 #include "util/strings_util.h"
 
-#define VERSION "0.2.9.6"
+#define VERSION "0.2.9.7"
 
 using namespace hhunter::util;
 
@@ -72,6 +72,19 @@ void print_loop_param(int param_color)
 {
     print_param_in_color(param_color, PARAM_LOOP);
     std::cout << "   : Enable continuous scanning.\n";
+}
+
+void print_ptimes_param(int param_color)
+{
+    print_param_in_color(param_color, PARAM_PTIMES);
+    std::cout << " <N seconds>\n\t: Scan only processes created N seconds before HH, or later.\n";
+}
+
+void print_pignore_param(int param_color)
+{
+    print_param_in_color(param_color, PARAM_PROCESSES_IGNORE);
+    std::cout << " <process_name>\n\t: Do not scan process/es with given name/s (separated by '" << PARAM_LIST_SEPARATOR << "').\n"
+        "\t  Example: explorer.exe" << PARAM_LIST_SEPARATOR << "conhost.exe\n";
 }
 
 void print_logo()
@@ -168,13 +181,9 @@ void print_help(std::string filter="")
     scan_params[PARAM_IAT] = print_iat_param;
     scan_params[PARAM_SHELLCODE] = print_shellc_param;
     scan_params[PARAM_DATA] = print_data_param;
-    
-#ifdef _WIN64
-    scan_exclusions[PARAM_MODULES_FILTER] = print_module_filter_param;
-#endif
 
     scan_exclusions[PARAM_MODULES_IGNORE] = print_mignore_param;
-
+    scan_exclusions[PARAM_PROCESSES_IGNORE] = print_pignore_param;
     scan_exclusions[PARAM_DOTNET_POLICY] = print_dnet_param;
     scan_target_params[PARAM_PTIMES] = print_ptimes_param;
 
@@ -418,21 +427,20 @@ int main(int argc, char *argv[])
         {
             continue;
         }
-        else if (get_int_param<DWORD>(argc, argv, param, i,
-            PARAM_MODULES_FILTER,
-            hh_args.pesieve_args.modules_filter,
-            LIST_MODULES_ALL,
-            info_req,
-            print_module_filter_param))
-        {
-            continue;
-        }
         else if (get_cstr_param(argc, argv, param, i,
             PARAM_MODULES_IGNORE,
             hh_args.pesieve_args.modules_ignored,
             MAX_MODULE_BUF_LEN,
             info_req,
             print_mignore_param))
+        {
+            continue;
+        }
+        else if (get_string_param(argc, argv, param, i,
+            PARAM_PROCESSES_IGNORE,
+            hh_args.pnames_ignored,
+            info_req,
+            print_pignore_param))
         {
             continue;
         }
